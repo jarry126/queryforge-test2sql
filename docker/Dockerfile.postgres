@@ -1,0 +1,29 @@
+# PostgreSQL 16 + pgvector + pg_jieba（中文全文检索分词）
+# 在官方 pgvector 镜像基础上编译安装 pg_jieba 扩展。
+FROM pgvector/pgvector:pg16
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git cmake g++ make postgresql-server-dev-16 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 强制使用 PG16 的 pg_config（避免被连带安装的 libpq-dev(18) 带偏版本探测），
+# 并显式把 16 的 server 头文件目录喂给 cmake，绕开 PostgreSQL_TYPE_INCLUDE_DIR NOTFOUND。
+ENV PATH="/usr/lib/postgresql/16/bin:${PATH}"
+RUN git clone --recurse-submodules https://github.com/jaiminpan/pg_jieba /tmp/pg_jieba \
+    && cd /tmp/pg_jieba \
+    && mkdir build && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release \
+        -DPostgreSQL_CONFIG=/usr/lib/postgresql/16/bin/pg_config \
+        -DPostgreSQL_INCLUDE_DIR="$(/usr/lib/postgresql/16/bin/pg_config --includedir)" \
+        -DPostgreSQL_TYPE_INCLUDE_DIR="$(/usr/lib/postgresql/16/bin/pg_config --includedir-server)" \
+        -DPostgreSQL_LIBRARY_DIR="$(/usr/lib/postgresql/16/bin/pg_config --libdir)" \
+        .. \
+    && make && make install \
+    && rm -rf /tmp/pg_jieba
+
+# 初始化脚本：建库后自动创建扩展
+COPY docker/init-extensions.sql /docker-entrypoint-initdb.d/10-extensions.sql
+
+USER postgres

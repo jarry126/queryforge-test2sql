@@ -1,0 +1,8 @@
+{
+  "cre_Doc_Template_Mgt": {
+    "Ref_Template_Types": "这张表用于存储模板类型的代码和描述，为系统中的不同文档模板提供分类。",
+    "Templates": "此表记录了各类文档模板的基本信息及其版本历史，包括模板类型、生效日期范围及详细内容。Template_Type_Code字段关联到Ref_Template_Types表，表示该模板属于哪种类型。",
+    "Documents": "这张表用来保存基于特定模板创建的具体文档的信息，如文档名称与描述等。通过Template_ID字段链接到Templates表，表明每份文档是根据哪个模板生成的。",
+    "Paragraphs": "此表包含了文档中各个段落的文字内容及其他相关信息。每个段落都隶属于某一份具体的文档，这种归属关系通过Document_ID字段体现，指向Documents表中的相应条目。"
+  }
+}

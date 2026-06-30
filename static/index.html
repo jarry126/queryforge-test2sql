@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QueryForge · Text-to-SQL</title>
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+  <!-- 登录 / 注册 -->
+  <div id="auth-view" class="auth-view">
+    <div class="auth-card">
+      <h1>QueryForge</h1>
+      <p class="sub">自然语言查数据库 · Text-to-SQL</p>
+      <input id="username" placeholder="用户名" autocomplete="username" />
+      <input id="password" type="password" placeholder="密码" autocomplete="current-password" />
+      <div class="auth-btns">
+        <button id="btn-login">登录</button>
+        <button id="btn-register" class="secondary">注册</button>
+      </div>
+      <div id="auth-error" class="error"></div>
+    </div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="app-view" class="app-view hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span id="who"></span>
+        <button id="btn-logout" class="link">退出</button>
+      </div>
+      <div class="new-session">
+        <select id="db-select"><option value="">选择数据库…</option></select>
+        <button id="btn-new">+ 新会话</button>
+      </div>
+      <ul id="session-list" class="session-list"></ul>
+    </aside>
+
+    <main class="chat">
+      <div id="chat-title" class="chat-title">选择或新建一个会话开始</div>
+      <div id="messages" class="messages"></div>
+      <form id="chat-form" class="chat-form">
+        <input id="chat-input" placeholder="用自然语言提问，例如：我们有多少歌手？" autocomplete="off" disabled />
+        <button id="chat-send" disabled>发送</button>
+      </form>
+    </main>
+  </div>
+
+  <script src="app.js?v=2"></script>
+</body>
+</html>

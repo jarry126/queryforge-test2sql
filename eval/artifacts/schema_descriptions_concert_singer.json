@@ -1,0 +1,8 @@
+{
+  "concert_singer": {
+    "stadium": "记录体育场的基本信息，包括位置、名称和容量。Highest、Lowest 和 Average 字段可能分别表示该体育场举办活动时的最高、最低和平均观众人数。",
+    "singer": "存储歌手的信息，包括姓名、国籍、代表歌曲及其发行年份、年龄以及性别。",
+    "concert": "记录演唱会的具体信息，如演唱会名称、主题、举办地点（通过外键 Stadium_ID 关联到 stadium 表）及年份。",
+    "singer_in_concert": "用于关联歌手与他们参与的演唱会，通过 Singer_ID 和 concert_ID 分别指向 singer 表和 concert 表中的记录，表明哪些歌手参加了哪些演唱会。"
+  }
+}

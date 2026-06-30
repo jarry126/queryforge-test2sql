@@ -1,0 +1,89 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "QueryForge — Text-to-SQL",
+  "uid": "queryforge-text2sql",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "查询 QPS（按结果）",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum by (status) (rate(qf_query_requests_total[1m]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "端到端时延 P50/P95/P99",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(qf_query_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(qf_query_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(qf_query_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "LLM 调用 P95 时延（按节点）",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(qf_llm_latency_seconds_bucket[5m])) by (le, node))", "legendFormat": "{{node}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "SQL 执行成功率",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        { "expr": "sum(rate(qf_sql_exec_total{status=\"ok\"}[5m])) / clamp_min(sum(rate(qf_sql_exec_total[5m])), 0.0001)", "legendFormat": "成功率" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "缓存命中率（精确+语义）",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        { "expr": "sum(rate(qf_cache_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(qf_cache_total[5m])), 0.0001)", "legendFormat": "命中率" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "自纠错触发次数",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "rate(qf_sql_self_correct_total[5m])", "legendFormat": "self-correct/s" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "检索时延 P95（按通道）",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(qf_retrieval_latency_seconds_bucket[5m])) by (le, channel))", "legendFormat": "{{channel}}" }
+      ]
+    }
+  ],
+  "__inputs": []
+}

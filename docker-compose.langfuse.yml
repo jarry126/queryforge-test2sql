@@ -1,0 +1,107 @@
+# Langfuse v3 自托管栈（与主 compose 分开，按需启动）
+# 用法：
+#   make langfuse-up           # 启动，打开 http://localhost:3000 注册→建项目→拿 key
+#   把 key 填进 .env 的 LANGFUSE_PUBLIC_KEY/SECRET_KEY，LANGFUSE_HOST=http://localhost:3000
+# 生产务必修改 ENCRYPTION_KEY / NEXTAUTH_SECRET / SALT 等机密。
+services:
+  langfuse-web:
+    image: langfuse/langfuse:3
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+      langfuse-redis: { condition: service_healthy }
+    ports:
+      - "3000:3000"
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/langfuse
+      SALT: "change-me-salt"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000" # openssl rand -hex 32
+      NEXTAUTH_SECRET: "change-me-nextauth"
+      NEXTAUTH_URL: http://localhost:3000
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_INIT_ORG_ID: ""
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: langfuse-redis-pw
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+      langfuse-redis: { condition: service_healthy }
+    environment: *langfuse-env
+
+  langfuse-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langfuse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - langfuse_pg:/var/lib/postgresql/data
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server
+    environment:
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - langfuse_ch_data:/var/lib/clickhouse
+      - langfuse_ch_logs:/var/log/clickhouse-server
+
+  langfuse-minio:
+    image: minio/minio
+    # fs 模式下 /data 的顶层目录即为 bucket，预先建好 langfuse 桶
+    entrypoint: sh -c 'mkdir -p /data/langfuse && minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - langfuse_minio:/data
+
+  langfuse-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "langfuse-redis-pw"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "langfuse-redis-pw", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  langfuse_pg:
+  langfuse_ch_data:
+  langfuse_ch_logs:
+  langfuse_minio:
