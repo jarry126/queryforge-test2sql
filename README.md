@@ -3,6 +3,43 @@
 把自然语言问题转成**安全、可执行**的 SQL，并返回自然语言回答。链路可控、可追踪、可监控，
 内置限流、容错、缓存与自纠错，面向生产；仓库提供开环压测脚本，实际 QPS 需按模型、数据库和部署资源复测。
 
+## 项目定位
+
+QueryForge 是一个从真实业务 Text-to-SQL 实践中抽象、脱敏出来的通用工程框架，重点不是做一个能跑通的 demo，而是把 Text-to-SQL 落地时最容易被忽略的问题系统化：
+
+- **准确率验证**：基于 CSpider 做 Execution Accuracy、公平 A/B、RAG 消融、schema 风格对照。
+- **RAG 工程化**：schema / few-shot / docs 三类语料，支持向量检索、关键词检索、RRF、rerank。
+- **SQL 安全**：SQL Guard 只允许单条 SELECT，拦截 DDL/DML，自动 LIMIT，配合只读执行与超时控制。
+- **生产韧性**：限流、全局并发控制、LLM 并发闸门、熔断、重试、缓存、Docker 部署。
+- **可观测性**：Langfuse trace、Prometheus/Grafana 指标、结构化日志、correlation-id。
+- **多轮应用**：JWT 登录、会话列表、消息持久化、多轮历史上下文。
+
+适合用来研究或二次开发：
+
+- 企业内部数据问答 / BI Copilot
+- Text-to-SQL 工程化落地
+- LangGraph + RAG 生产链路
+- SQL Guard 与数据库只读执行
+- LLM 应用的评测、限流、监控和容错
+
+## 文章系列
+
+我把项目设计、实验过程和阶段结论整理成了三篇文章：
+
+1. [从真实业务实践中脱敏开源：我做了一个生产级 Text-to-SQL 框架](https://zhuanlan.zhihu.com/p/2055649184003389206)
+2. [Text-to-SQL 里 RAG 到底有没有用？我做了一组 CSpider 消融实验](https://zhuanlan.zhihu.com/p/2055697640805883997)
+3. [生产级 Text-to-SQL，最容易被忽略的不是生成 SQL，而是 SQL 安全](https://zhuanlan.zhihu.com/p/2055705543159854415)
+
+## 阶段实验结论
+
+| 实验 | 数据 | 结论 |
+|------|------|------|
+| 公平 A/B | `concert_singer · 45`：RAG retry `0.889` vs noRAG retry `0.800` | 单库场景 RAG 有明显收益 |
+| 公平 A/B | `cre_Doc_Template_Mgt · 50`：RAG retry `0.940` vs noRAG retry `0.880` | 中等难度问题收益更明显 |
+| 公平 A/B | `ALL · 100`：RAG retry `0.760` vs noRAG retry `0.780` | 跨库小样本下 RAG 不一定稳定提升 |
+| RAG 消融 | `ALL · 100`：schema_fewshot `0.790`，full_rag `0.750` | few-shot 是当前最稳定收益来源，full RAG 不一定最优 |
+| Schema 描述增强 | `concert_singer` 小幅提升，`cre_Doc_Template_Mgt` 下降 | schema 描述不能盲目上线，需要按库 A/B |
+
 ## 架构总览
 
 ```mermaid
