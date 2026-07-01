@@ -138,6 +138,7 @@ class Settings(BaseSettings):
     CSPIDER_DB_DIR: str = ""
     HISTORY_TURNS: int = 4
     EVAL_SKIP_ANSWER_LLM: bool = False
+    HIL_SQL_REVIEW_ENABLED: bool = False  # 人机交互 SQL 审核；默认关闭，脚本/特定会话按需开启
 
     # ---- Langfuse ----
     LANGFUSE_ENABLED: bool = False

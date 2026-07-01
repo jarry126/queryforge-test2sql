@@ -55,7 +55,6 @@ def chunk_markdown(text: str, max_chars: int = MAX_CHARS) -> list[Chunk]:
     current_title = ""
     blocks = re.split(r"(?m)^(#{1,6}\s.*)$", text)
     # re.split 会把标题与正文交替分出
-    i = 0
     segments: list[tuple[str, str]] = []
     if blocks and not blocks[0].startswith("#"):
         segments.append(("", blocks[0]))

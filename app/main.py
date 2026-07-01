@@ -6,9 +6,8 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-
 import os
+from contextlib import asynccontextmanager
 
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 from fastapi import FastAPI, Request, status
@@ -22,9 +21,9 @@ from app.api.v1.api import api_router
 from app.core.cache import close_redis, get_redis
 from app.core.config import settings
 from app.core.db import close_pool, get_pool
+from app.core.errors import classify
 from app.core.langgraph.graph import get_graph
 from app.core.limiter import limiter
-from app.core.errors import classify
 from app.core.logging import logger
 from app.core.metrics import metrics_app
 from app.core.middleware import LoggingContextMiddleware

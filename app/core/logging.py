@@ -17,9 +17,10 @@ import json
 import logging
 import os
 import sys
+from collections.abc import MutableMapping
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
-from typing import Any, MutableMapping
+from typing import Any
 
 import structlog
 from asgi_correlation_id import correlation_id

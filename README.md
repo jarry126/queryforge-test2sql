@@ -5,20 +5,49 @@
 
 ## 架构总览
 
-```
-FastAPI  ──►  LangGraph 链路  ──►  PostgreSQL(pgvector + pg_jieba) / Redis / sqlite(沙箱)
-   │                │
- 限流/缓存       Langfuse 追踪 + Prometheus 指标 + structlog 日志
+```mermaid
+flowchart LR
+    User["用户 / 前端 / Eval 脚本"] --> API["FastAPI API"]
+    API --> Guard["限流 / 鉴权 / 在途并发控制"]
+    Guard --> Cache["Redis 精确缓存<br/>pgvector 语义缓存"]
+    Cache --> Graph["LangGraph Text-to-SQL 链路"]
+    Graph --> RAG["RAG 检索<br/>schema / few-shot / docs"]
+    RAG --> PG["PostgreSQL<br/>pgvector + pg_jieba"]
+    Graph --> LLM["LLM<br/>OpenAI-compatible"]
+    Graph --> SQLGuard["SQL Guard<br/>sqlglot"]
+    SQLGuard --> Exec["只读 SQL 执行<br/>timeout + row limit"]
+    Exec --> DB["业务库 / CSpider sqlite"]
+    Graph --> Answer["SQL + 查询结果 + 自然语言回答"]
+    Answer --> API
+
+    Graph -. trace .-> Langfuse["Langfuse"]
+    API -. metrics .-> Prom["Prometheus / Grafana"]
+    API -. logs .-> Logs["structlog + correlation-id"]
 ```
 
 LangGraph 主链路（融合 RAG 设计图 + text-to-SQL 生产要素）：
 
+```mermaid
+flowchart LR
+    A["detect_language<br/>语言识别"] --> B["rewrite<br/>历史改写"]
+    B --> C["expand<br/>多查询扩展"]
+    C --> D["retrieve<br/>混合检索 + RRF + rerank"]
+    D -->|无 schema 上下文| E["error_node"]
+    D -->|有 schema 上下文| F["schema_linking<br/>相关表列裁剪"]
+    F --> G["generate_sql<br/>生成 SQL"]
+    G --> H["validate_sql<br/>SQL Guard"]
+    H -->|通过| I["execute_sql<br/>只读执行"]
+    H -->|失败且未超限| J["self_correct"]
+    I -->|成功| K["format_answer<br/>组装回答"]
+    I -->|失败且未超限| J
+    J --> G
+    H -->|失败且超限| K
+    I -->|失败且超限| K
+    E --> L["END"]
+    K --> L
 ```
-语言识别 → 历史改写 → 多查询扩展 → 混合检索(向量+pg_jieba, RRF) → 重排 ─┬─无上下文→ 报错
-                                                                       └→ schema linking → 生成SQL
-   ↑(自纠错环路)                                                                    ↓
- self_correct ←─失败且未超限─ 安全校验(sqlglot) ─通过─→ 沙箱执行 ─成功─→ 组装回答
-```
+
+更详细的架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 关键能力（生产"该有的"）
 
@@ -123,6 +152,8 @@ python -m eval.ragas_eval --limit 50    # RAG 质量辅助分析（非 Text-to-S
 - query expansion、业务文档上下文、retry 并非稳定正收益，默认应保守关闭或经过离线 A/B 后开启。
 - schema 描述增强不是天然增益：`concert_singer` 有轻微提升，`cre_Doc_Template_Mgt` 明显下降，因此不能盲目上线。
 - RAGAS 更适合文档问答型 RAG；本项目以 Execution Accuracy 作为主指标，RAGAS 只作为检索质量辅助分析。
+
+评测脚本、指标口径和复现实验命令见 [docs/EVALS.md](docs/EVALS.md)。
 
 ## 配置
 

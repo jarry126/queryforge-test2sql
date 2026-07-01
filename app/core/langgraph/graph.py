@@ -38,9 +38,19 @@ def _route_after_execute(state: GraphState) -> str:
         return "format_answer"
     return "self_correct" if state.get("attempt", 0) < settings.SQL_MAX_RETRY else "format_answer"
 
+
+def _route_after_generate_sql(_: GraphState, enable_hil: bool) -> str:
+    return "human_review_sql" if enable_hil else "validate_sql"
+
+
+def _route_after_human_review(state: GraphState) -> str:
+    return "format_answer" if state.get("error") else "validate_sql"
+
+
 # 构建 text-to-SQL 图
-def build_graph(checkpointer=None):
+def build_graph(checkpointer=None, enable_hil: bool | None = None):
     """构建并编译 text-to-SQL 图。"""
+    enable_hil = settings.HIL_SQL_REVIEW_ENABLED if enable_hil is None else enable_hil
     g = StateGraph(GraphState)
 
     g.add_node("detect_language", nodes.detect_language)
@@ -49,6 +59,7 @@ def build_graph(checkpointer=None):
     g.add_node("retrieve", nodes.retrieve)
     g.add_node("schema_linking", nodes.schema_linking)
     g.add_node("generate_sql", nodes.generate_sql)
+    g.add_node("human_review_sql", nodes.human_review_sql)
     g.add_node("validate_sql", nodes.validate_sql)
     g.add_node("execute_sql", nodes.execute_sql)
     g.add_node("self_correct", nodes.self_correct)
@@ -63,7 +74,16 @@ def build_graph(checkpointer=None):
         "retrieve", _route_after_retrieve, {"schema_linking": "schema_linking", "error_node": "error_node"}
     )
     g.add_edge("schema_linking", "generate_sql")
-    g.add_edge("generate_sql", "validate_sql")
+    g.add_conditional_edges(
+        "generate_sql",
+        lambda state: _route_after_generate_sql(state, enable_hil),
+        {"human_review_sql": "human_review_sql", "validate_sql": "validate_sql"},
+    )
+    g.add_conditional_edges(
+        "human_review_sql",
+        _route_after_human_review,
+        {"validate_sql": "validate_sql", "format_answer": "format_answer"},
+    )
     g.add_conditional_edges(
         "validate_sql",
         _route_after_validate,
