@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queryforge-config
+  namespace: queryforge
+  labels:
+    app.kubernetes.io/name: queryforge
+data:
+  APP_ENV: "production"
+  PROJECT_NAME: "QueryForge Text-to-SQL"
+  VERSION: "0.1.0"
+  API_V1_STR: "/api/v1"
+  DEBUG: "false"
+  ALLOWED_ORIGINS: "https://your-frontend.example.com"
+  PUBLIC_QUERY_ENABLED: "false"
+  APP_WORKERS: "1"
+
+  LLM_PROVIDER: "openai"
+  LLM_MODEL: "qwen-max"
+  LLM_TEMPERATURE: "0.0"
+  LLM_MAX_TOKENS: "2000"
+  LLM_TIMEOUT_SECONDS: "60"
+  LLM_MAX_RETRIES: "3"
+  LLM_MAX_CONCURRENCY: "5"
+  OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+  DASHSCOPE_MAX_CONCURRENCY: "20"
+  EMBEDDING_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  EMBEDDING_MODEL: "text-embedding-v4"
+  EMBEDDING_DIM: "1536"
+  EMBEDDING_BATCH_SIZE: "10"
+  RERANK_ENABLED: "true"
+  RERANK_BASE_URL: "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
+  RERANK_MODEL: "gte-rerank-v2"
+  RERANK_TOP_N: "8"
+
+  POSTGRES_HOST: "postgres.queryforge.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "queryforge"
+  POSTGRES_USER: "queryforge_app"
+  POSTGRES_POOL_MIN: "2"
+  POSTGRES_POOL_MAX: "10"
+
+  QUERY_POSTGRES_HOST: "business-readonly.internal"
+  QUERY_POSTGRES_PORT: "5432"
+  QUERY_POSTGRES_DB: "business_db"
+  QUERY_POSTGRES_USER: "queryforge_readonly"
+  QUERY_POSTGRES_POOL_MIN: "1"
+  QUERY_POSTGRES_POOL_MAX: "5"
+
+  REDIS_ENABLED: "true"
+  REDIS_HOST: "redis.queryforge.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  CACHE_TTL_SECONDS: "600"
+
+  SEMANTIC_CACHE_ENABLED: "false"
+  SEMANTIC_CACHE_THRESHOLD: "0.97"
+  SEMANTIC_CACHE_TTL_SECONDS: "3600"
+
+  CIRCUIT_FAIL_THRESHOLD: "5"
+  CIRCUIT_RESET_SECONDS: "30"
+
+  RETRIEVE_TOP_K: "20"
+  RRF_K: "60"
+  QUERY_EXPANSION_ENABLED: "false"
+  DOC_CONTEXT_ENABLED: "false"
+  FEWSHOT_TOP_K: "3"
+  FEWSHOT_CROSS_DB: "false"
+  RETRIEVAL_BACKEND: "pg_jieba"
+
+  SQL_DIALECT: "postgres"
+  SQL_MAX_RETRY: "2"
+  SQL_EXEC_TIMEOUT_SECONDS: "10"
+  SQL_MAX_ROWS: "200"
+  QUERY_MAX_INFLIGHT: "20"
+  QUERY_INFLIGHT_BACKEND: "redis"
+  QUERY_INFLIGHT_TTL_SECONDS: "120"
+  HISTORY_TURNS: "4"
+  EVAL_SKIP_ANSWER_LLM: "false"
+
+  LANGFUSE_ENABLED: "false"
+  LANGFUSE_HOST: "https://cloud.langfuse.com"
+
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRE_MINUTES: "1440"
+  INGEST_MAX_CHARS: "200000"
+
+  RATE_LIMIT_QUERY: "100/second"
+  RATE_LIMIT_QUERY_GLOBAL: "300/second"
+  RATE_LIMIT_DEFAULT: "1000/minute"
+
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  LOG_DIR: "/tmp/queryforge-logs"
+

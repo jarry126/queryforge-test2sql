@@ -211,6 +211,25 @@ python -m eval.ragas_eval --limit 50    # RAG 质量辅助分析（非 Text-to-S
 - `QUERY_MAX_INFLIGHT` 控制 `/query` 与 `/sessions/{id}/chat` 的在途请求并发，超过上限快速返回 503；生产使用 `QUERY_INFLIGHT_BACKEND=redis`，多 worker/多容器共享同一个并发计数。
 - Docker 默认 `APP_WORKERS=1`。该项目优先通过多容器/多 Pod 横向扩容；如果单容器多 worker，需要同步处理 Prometheus multiprocess 指标、连接池总量和进程内状态放大问题。
 
+## Kubernetes 轻量部署
+
+仓库提供一套最小可运行的 Kubernetes 清单，见 [deploy/k8s/README.md](deploy/k8s/README.md)：
+
+```bash
+docker build -t queryforge-text2sql:latest .
+cp deploy/k8s/secret.example.yaml deploy/k8s/secret.yaml
+# 修改 deploy/k8s/secret.yaml 中的密钥占位符
+kubectl apply -f deploy/k8s/secret.yaml
+kubectl apply -k deploy/k8s
+kubectl -n queryforge port-forward svc/queryforge-api 8000:8000
+curl http://localhost:8000/api/v1/live
+curl http://localhost:8000/api/v1/ready
+curl http://localhost:8000/metrics/
+```
+
+这套清单只部署 API 本身，PostgreSQL、Redis、Langfuse、Prometheus/Grafana 默认作为外部依赖；同时提供可选 `Ingress` 和 `ServiceMonitor`，用于接入 ingress-nginx 与 Prometheus Operator。
+当前已在 Docker Desktop Kubernetes 中完成本地验证；生产环境建议迁移到阿里云 ACK、腾讯 TKE、华为 CCE 等托管 K8s，并配合镜像仓库、云数据库/Redis、SLB/Ingress、HTTPS 证书、日志与监控体系使用。
+
 **切换关键词检索后端到 Elasticsearch：**
 ```bash
 docker compose --profile es up -d elasticsearch   # 启动 ES

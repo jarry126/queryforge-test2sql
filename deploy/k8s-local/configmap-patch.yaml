@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queryforge-config
+  namespace: queryforge
+data:
+  APP_ENV: "development"
+  DEBUG: "false"
+  ALLOWED_ORIGINS: "*"
+  PUBLIC_QUERY_ENABLED: "true"
+
+  POSTGRES_HOST: "host.docker.internal"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "queryforge"
+  POSTGRES_USER: "queryforge"
+
+  QUERY_POSTGRES_HOST: "host.docker.internal"
+  QUERY_POSTGRES_PORT: "5432"
+  QUERY_POSTGRES_DB: "queryforge"
+  QUERY_POSTGRES_USER: "queryforge"
+
+  REDIS_ENABLED: "true"
+  REDIS_HOST: "host.docker.internal"
+  REDIS_PORT: "6379"
+
+  SQL_DIALECT: "postgres"
+  LANGFUSE_ENABLED: "false"
+  LOG_DIR: "/tmp/queryforge-logs"

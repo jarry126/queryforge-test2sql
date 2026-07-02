@@ -5,6 +5,7 @@ venv/
 .env
 .env.local
 .env.*.local
+deploy/k8s/secret.yaml
 logs/
 *.log
 .pytest_cache/

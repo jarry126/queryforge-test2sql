@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../k8s
+
+patches:
+  - path: configmap-patch.yaml
+
+images:
+  - name: queryforge-text2sql
+    newName: queryforge-text2sql-app
+    newTag: k8s-local
