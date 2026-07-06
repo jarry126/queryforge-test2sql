@@ -230,6 +230,15 @@ curl http://localhost:8000/metrics/
 这套清单只部署 API 本身，PostgreSQL、Redis、Langfuse、Prometheus/Grafana 默认作为外部依赖；同时提供可选 `Ingress` 和 `ServiceMonitor`，用于接入 ingress-nginx 与 Prometheus Operator。
 当前已在 Docker Desktop Kubernetes 中完成本地验证；生产环境建议迁移到阿里云 ACK、腾讯 TKE、华为 CCE 等托管 K8s，并配合镜像仓库、云数据库/Redis、SLB/Ingress、HTTPS 证书、日志与监控体系使用。
 
+## 可选扩展：Prompt Skills
+
+仓库提供两个可选 Agent Skill，见 [docs/PROMPT_SKILLS.md](docs/PROMPT_SKILLS.md)：
+
+- `skills/prompt-builder`：用于生成可版本管理、可测试的 Text-to-SQL prompt 资产。
+- `skills/prompt-evaluator`：用于评估候选 prompt 的准确性、格式稳定性、安全约束和发布风险。
+
+这两个 skill 不属于线上服务依赖，只作为 Prompt Engineering 的研发辅助工具。Codex 用户可复制到 `~/.codex/skills/` 使用；Claude Code 用户可复制到 `.claude/skills/` 使用。
+
 **切换关键词检索后端到 Elasticsearch：**
 ```bash
 docker compose --profile es up -d elasticsearch   # 启动 ES
