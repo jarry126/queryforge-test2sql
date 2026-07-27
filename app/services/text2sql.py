@@ -8,15 +8,22 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import AsyncGenerator
+from typing import Any, cast
+
+from langchain_core.runnables import RunnableConfig
 
 from app.core.cache import get_cached, set_cached
+from app.core.config import settings
 from app.core.errors import classify
 from app.core.langgraph.graph import get_graph
+from app.core.langgraph.state import GraphState
 from app.core.logging import logger
 from app.core.metrics import query_latency_seconds, query_requests_total
 from app.core.observability import get_langfuse_handler
 from app.core.semantic_cache import get_semantic_cached, set_semantic_cached
 from app.schemas.query import QueryRequest, QueryResponse
+from app.services.stream_events import QueryStreamEvent, events_after_node, plan_event, progress
 
 
 def _history_to_dicts(history) -> list[dict]:
@@ -54,7 +61,7 @@ async def run_query(req: QueryRequest) -> QueryResponse:
 
     # 2) 调用 LangGraph
     graph = await get_graph()
-    init_state = {
+    init_state: GraphState = {
         "question": req.question,
         "db_id": req.db_id,
         "attempt": 0,
@@ -62,7 +69,10 @@ async def run_query(req: QueryRequest) -> QueryResponse:
     }
     # checkpointer 需要 thread_id：会话用 session_id，单轮查询用一次性临时 id
     thread_id = req.thread_id or f"oneshot-{uuid.uuid4().hex}"
-    config: dict = {"recursion_limit": 25, "configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {
+        "recursion_limit": 25,
+        "configurable": {"thread_id": thread_id},
+    }
     if handler := get_langfuse_handler():
         config["callbacks"] = [handler]
 
@@ -103,3 +113,110 @@ async def run_query(req: QueryRequest) -> QueryResponse:
         await set_cached(req.db_id, req.question, payload)
         await set_semantic_cached(req.db_id, req.question, payload)
     return resp
+
+
+async def run_query_stream(req: QueryRequest) -> AsyncGenerator[QueryStreamEvent]:
+    """执行查询并输出真实 LangGraph 节点进度，最后输出完整 result 事件。
+
+    第一版只流式输出安全进度，最终自然语言答案仍作为完整结果返回。这样不改变
+    现有节点的重试、熔断、缓存和持久化语义；逐 Token 答案可在后续迭代增加。
+    """
+
+    start = time.perf_counter()
+    yield QueryStreamEvent(
+        "meta",
+        {"thread_id": req.thread_id, "db_id": req.db_id, "stream_version": 1},
+    )
+    yield plan_event()
+    yield progress("accepted", "completed", "已收到问题")
+
+    use_cache = not req.history
+    if use_cache:
+        yield progress("cache", "running", "正在检查可复用的历史结果")
+        cached = await get_cached(req.db_id, req.question)
+        if cached:
+            query_requests_total.labels(status="cache_hit").inc()
+            resp = QueryResponse(**cached, from_cache=True)
+            yield progress("cache", "completed", "已找到可复用结果")
+            yield QueryStreamEvent("result", resp.model_dump(mode="json"))
+            return
+
+        sem = await get_semantic_cached(req.db_id, req.question)
+        if sem:
+            query_requests_total.labels(status="semantic_cache_hit").inc()
+            await set_cached(req.db_id, req.question, sem)
+            resp = QueryResponse(**sem, from_cache=True)
+            yield progress("cache", "completed", "已找到语义相近的历史结果")
+            yield QueryStreamEvent("result", resp.model_dump(mode="json"))
+            return
+        yield progress("cache", "completed", "未命中缓存，将执行完整分析")
+
+    graph = await get_graph()
+    init_state: GraphState = {
+        "question": req.question,
+        "db_id": req.db_id,
+        "attempt": 0,
+        "history": _history_to_dicts(req.history),
+    }
+    thread_id = req.thread_id or f"oneshot-{uuid.uuid4().hex}"
+    config: RunnableConfig = {
+        "recursion_limit": 25,
+        "configurable": {"thread_id": thread_id},
+    }
+    if handler := get_langfuse_handler():
+        config["callbacks"] = [handler]
+
+    yield progress("understand", "running", "正在理解问题并识别语言")
+    final: GraphState | None = None
+    try:
+        async for stream_item in graph.astream(
+            init_state,
+            config=config,
+            stream_mode=["updates", "values"],
+        ):
+            mode, chunk = cast(tuple[str, Any], stream_item)
+            if mode == "values":
+                final = cast(GraphState, chunk)
+                continue
+            if mode != "updates" or not isinstance(chunk, dict):
+                continue
+            for node, update in cast(dict[str, Any], chunk).items():
+                if not isinstance(update, dict):
+                    continue
+                for event in events_after_node(node, update, settings.SQL_MAX_RETRY):
+                    yield event
+    except Exception as e:  # noqa: BLE001
+        err = classify(e)
+        logger.exception("graph_stream_failed", category=err.category)
+        query_requests_total.labels(status="error").inc()
+        query_latency_seconds.labels(status="error").observe(time.perf_counter() - start)
+        raise err from e
+
+    if final is None:
+        raise RuntimeError("LangGraph stream ended without a final state")
+
+    result = final.get("sql_result", {}) or {}
+    resp = QueryResponse(
+        question=req.question,
+        db_id=req.db_id,
+        sql=final.get("sql", ""),
+        success=bool(final.get("success")),
+        answer=final.get("answer", ""),
+        language=final.get("language", "zh"),
+        columns=result.get("columns", []),
+        rows=result.get("rows", []),
+        row_count=result.get("row_count", 0),
+        attempts=final.get("attempt", 0),
+        error=final.get("error"),
+    )
+
+    status = "ok" if resp.success else "failed"
+    query_requests_total.labels(status=status).inc()
+    query_latency_seconds.labels(status=status).observe(time.perf_counter() - start)
+
+    if resp.success and use_cache:
+        payload = resp.model_dump(exclude={"from_cache"})
+        await set_cached(req.db_id, req.question, payload)
+        await set_semantic_cached(req.db_id, req.question, payload)
+
+    yield QueryStreamEvent("result", resp.model_dump(mode="json"))

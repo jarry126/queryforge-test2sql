@@ -6,20 +6,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import uuid
+from collections.abc import AsyncGenerator, AsyncIterator
 
+from asgi_correlation_id import correlation_id
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.core.errors import classify
 from app.core.inflight import query_inflight_slot
 from app.core.limiter import limiter
+from app.core.logging import logger
 from app.schemas.auth import ChatMessage, ChatRequest, CreateSessionRequest, SessionInfo
-from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.query import HistoryTurn, QueryRequest, QueryResponse
 from app.services import session_store
-from app.services.text2sql import run_query
+from app.services.stream_events import QueryStreamEvent, encode_sse
+from app.services.text2sql import run_query, run_query_stream
 
 router = APIRouter(tags=["sessions"])
+_STREAM_HEARTBEAT_SECONDS = 15.0
 
 
 @router.get("/databases", response_model=list[str])
@@ -73,7 +82,7 @@ async def chat(
         question=question,
         db_id=session["db_id"],
         thread_id=session_id,  # 会话 id 作为 checkpointer thread_id（HIL/断点续跑用）
-        history=[{"role": m["role"], "content": m["content"]} for m in recent],
+        history=[HistoryTurn(role=m["role"], content=m["content"]) for m in recent],
     )
     async with query_inflight_slot():
         resp = await run_query(req)
@@ -92,3 +101,138 @@ async def chat(
     if not history:
         await session_store.rename_if_default(session_id, question[:30])
     return resp
+
+
+async def _stream_with_heartbeat(
+    iterator: AsyncGenerator[QueryStreamEvent],
+) -> AsyncIterator[QueryStreamEvent]:
+    """等待真实事件期间发送心跳，且不取消正在执行的 LangGraph anext。"""
+
+    pending: asyncio.Future[QueryStreamEvent] | None = None
+    try:
+        pending = asyncio.ensure_future(anext(iterator))
+        while True:
+            done, _ = await asyncio.wait({pending}, timeout=_STREAM_HEARTBEAT_SECONDS)
+            if not done:
+                yield QueryStreamEvent("heartbeat", {"message": "任务仍在执行"})
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                return
+            yield event
+            pending = asyncio.ensure_future(anext(iterator))
+    finally:
+        if pending and not pending.done():
+            pending.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pending
+        with contextlib.suppress(Exception):
+            await iterator.aclose()
+
+
+@router.post("/sessions/{session_id}/chat/stream")
+@limiter.shared_limit(settings.RATE_LIMIT_QUERY_GLOBAL, scope="query-global")
+@limiter.limit(settings.RATE_LIMIT_QUERY)
+async def chat_stream(
+    request: Request,
+    session_id: str,
+    body: ChatRequest,
+    user: dict = Depends(get_current_user),
+) -> StreamingResponse:
+    """SSE 多轮查询：实时输出安全进度，完成后持久化并返回最终结果。"""
+
+    session = await session_store.get_session(session_id, user["id"])
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    question = body.question.strip()
+    if not question:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="问题不能为空")
+
+    history = await session_store.list_messages(session_id)
+    recent = history[-settings.HISTORY_TURNS * 2 :]
+    req = QueryRequest(
+        question=question,
+        db_id=session["db_id"],
+        thread_id=session_id,
+        history=[HistoryTurn(role=m["role"], content=m["content"]) for m in recent],
+    )
+    turn_id = uuid.uuid4().hex
+    request_id = correlation_id.get() or "-"
+
+    async def event_source() -> AsyncIterator[str]:
+        sequence = 0
+
+        def frame(event: QueryStreamEvent) -> str:
+            nonlocal sequence
+            sequence += 1
+            return encode_sse(event, sequence)
+
+        stream = run_query_stream(req)
+        try:
+            async with query_inflight_slot():
+                async for event in _stream_with_heartbeat(stream):
+                    if event.name == "meta":
+                        event = QueryStreamEvent(
+                            "meta",
+                            {**event.data, "turn_id": turn_id, "request_id": request_id},
+                        )
+                    if event.name != "result":
+                        yield frame(event)
+                        continue
+
+                    resp = QueryResponse(**event.data)
+                    await session_store.add_turn(
+                        session_id,
+                        question,
+                        resp.answer,
+                        resp.sql,
+                        result={
+                            "columns": resp.columns,
+                            "rows": resp.rows,
+                            "row_count": resp.row_count,
+                        },
+                        turn_id=turn_id,
+                    )
+                    if not history:
+                        await session_store.rename_if_default(session_id, question[:30])
+                    yield frame(QueryStreamEvent("result", {**event.data, "turn_id": turn_id}))
+                    yield frame(
+                        QueryStreamEvent(
+                            "done",
+                            {"success": resp.success, "turn_id": turn_id, "request_id": request_id},
+                        )
+                    )
+                    return
+        except asyncio.CancelledError:
+            logger.info("chat_stream_cancelled", session_id=session_id, turn_id=turn_id)
+            raise
+        except Exception as exc:  # SSE 已开始，不能再依靠普通 HTTP 异常响应
+            err = classify(exc)
+            logger.exception(
+                "chat_stream_failed",
+                category=err.category,
+                session_id=session_id,
+                turn_id=turn_id,
+            )
+            yield frame(
+                QueryStreamEvent(
+                    "error",
+                    {
+                        "category": err.category,
+                        "message": err.user_message,
+                        "request_id": request_id,
+                        "turn_id": turn_id,
+                    },
+                )
+            )
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
