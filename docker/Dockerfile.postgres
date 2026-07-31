@@ -4,9 +4,10 @@ FROM pgvector/pgvector:pg16
 
 USER root
 
-ARG DEBIAN_MIRROR=https://mirrors.aliyun.com/debian
-ARG DEBIAN_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security
-ARG PGDG_MIRROR=https://mirrors.aliyun.com/postgresql/repos/apt
+# 基础镜像尚未安装 CA 证书，首次 apt 安装使用签名校验的 HTTP 镜像引导。
+ARG DEBIAN_MIRROR=http://mirrors.aliyun.com/debian
+ARG DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security
+ARG PGDG_MIRROR=http://mirrors.aliyun.com/postgresql/repos/apt
 
 RUN set -eux; \
     for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
@@ -28,8 +29,11 @@ RUN set -eux; \
 # 强制使用 PG16 的 pg_config（避免被连带安装的 libpq-dev(18) 带偏版本探测），
 # 并显式把 16 的 server 头文件目录喂给 cmake，绕开 PostgreSQL_TYPE_INCLUDE_DIR NOTFOUND。
 ENV PATH="/usr/lib/postgresql/16/bin:${PATH}"
-RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
-        https://github.com/jaiminpan/pg_jieba /tmp/pg_jieba \
+RUN git config --global \
+        url."https://gitee.com/mirrors/cppjieba.git".insteadOf \
+        "https://github.com/yanyiwu/cppjieba" \
+    && git clone --depth 1 --recurse-submodules --shallow-submodules \
+        https://gitee.com/mirrors/pg_jieba.git /tmp/pg_jieba \
     && cd /tmp/pg_jieba \
     && mkdir build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release \

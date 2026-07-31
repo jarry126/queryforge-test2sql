@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.db import get_pool
+from app.core.rag.vectorstore import strip_embedding
 
 JIEBA_CFG = "jiebacfg"
 
@@ -34,4 +35,4 @@ async def keyword_search(table: str, query: str, top_k: int, db_id: str | None =
             params,
         )
         cols = [c.name for c in cur.description]
-        return [dict(zip(cols, row, strict=True)) for row in await cur.fetchall()]
+        return [strip_embedding(dict(zip(cols, row, strict=True))) for row in await cur.fetchall()]
