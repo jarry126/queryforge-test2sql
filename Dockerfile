@@ -1,9 +1,12 @@
 # QueryForge 应用镜像
 FROM python:3.11-slim
 
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
     APP_WORKERS=1
 
 WORKDIR /app

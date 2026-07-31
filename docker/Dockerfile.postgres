@@ -4,14 +4,32 @@ FROM pgvector/pgvector:pg16
 
 USER root
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+ARG DEBIAN_MIRROR=https://mirrors.aliyun.com/debian
+ARG DEBIAN_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security
+ARG PGDG_MIRROR=https://mirrors.aliyun.com/postgresql/repos/apt
+
+RUN set -eux; \
+    for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do \
+        if [ -f "${source_file}" ]; then \
+            sed -i \
+                -e "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
+                -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
+                -e "s|https://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
+                -e "s|https://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
+                -e "s|http://apt.postgresql.org/pub/repos/apt|${PGDG_MIRROR}|g" \
+                -e "s|https://apt.postgresql.org/pub/repos/apt|${PGDG_MIRROR}|g" \
+                "${source_file}"; \
+        fi; \
+    done; \
+    apt-get update && apt-get install -y --no-install-recommends \
         git cmake g++ make postgresql-server-dev-16 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 强制使用 PG16 的 pg_config（避免被连带安装的 libpq-dev(18) 带偏版本探测），
 # 并显式把 16 的 server 头文件目录喂给 cmake，绕开 PostgreSQL_TYPE_INCLUDE_DIR NOTFOUND。
 ENV PATH="/usr/lib/postgresql/16/bin:${PATH}"
-RUN git clone --recurse-submodules https://github.com/jaiminpan/pg_jieba /tmp/pg_jieba \
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
+        https://github.com/jaiminpan/pg_jieba /tmp/pg_jieba \
     && cd /tmp/pg_jieba \
     && mkdir build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release \
