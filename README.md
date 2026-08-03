@@ -3,6 +3,11 @@
 把自然语言问题转成**安全、可执行**的 SQL，并返回自然语言回答。链路可控、可追踪、可监控，
 内置限流、容错、缓存与自纠错，面向生产；仓库提供开环压测脚本，实际 QPS 需按模型、数据库和部署资源复测。
 
+- 后端仓库：<https://github.com/jarry126/queryforge-test2sql>
+- 独立前端：<https://github.com/jarry126/queryforge-web>
+- 本地 API 文档：<http://localhost:8000/docs>
+- 本地 React 前端：<http://localhost:5173>
+
 ## 项目定位
 
 QueryForge 是一个从真实业务 Text-to-SQL 实践中抽象、脱敏出来的通用工程框架，重点不是做一个能跑通的 demo，而是把 Text-to-SQL 落地时最容易被忽略的问题系统化：
