@@ -42,9 +42,20 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1)
 
 
+class MessageFeedbackBrief(BaseModel):
+    id: int
+    rating: str
+    comment: str | None = None
+    question_text: str = ""
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 class ChatMessage(BaseModel):
+    id: int | None = None
     role: str
     content: str
     sql: str | None = None
     result: dict | None = None
     turn_id: str | None = None
+    feedback: MessageFeedbackBrief | None = None

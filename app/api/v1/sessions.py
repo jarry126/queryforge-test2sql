@@ -52,7 +52,9 @@ async def list_sessions(user: dict = Depends(get_current_user)) -> list[SessionI
 async def get_messages(session_id: str, user: dict = Depends(get_current_user)) -> list[ChatMessage]:
     if not await session_store.get_session(session_id, user["id"]):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-    return [ChatMessage(**m) for m in await session_store.list_messages(session_id)]
+    return [
+        ChatMessage(**m) for m in await session_store.list_messages(session_id, user_id=user["id"])
+    ]
 
 
 @router.delete("/sessions/{session_id}")
