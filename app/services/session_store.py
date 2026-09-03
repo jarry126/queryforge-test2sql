@@ -68,20 +68,47 @@ async def rename_if_default(session_id: str, title: str) -> None:
         )
 
 
-async def list_messages(session_id: str) -> list[dict]:
+async def list_messages(session_id: str, user_id: int | None = None) -> list[dict]:
     pool = await get_pool()
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             """
-            SELECT role, content, sql, result, turn_id FROM chat_message
+            SELECT id, role, content, sql, result, turn_id FROM chat_message
             WHERE session_id = %s ORDER BY id
             """,
             (session_id,),
         )
-        return [
-            {"role": r[0], "content": r[1], "sql": r[2], "result": r[3], "turn_id": r[4]}
+        messages = [
+            {
+                "id": r[0],
+                "role": r[1],
+                "content": r[2],
+                "sql": r[3],
+                "result": r[4],
+                "turn_id": r[5],
+                "feedback": None,
+            }
             for r in await cur.fetchall()
         ]
+
+    if user_id is not None and messages:
+        from app.services import feedback_store
+
+        feedback_map = await feedback_store.map_feedback_by_message_ids(
+            user_id, [m["id"] for m in messages]
+        )
+        for message in messages:
+            fb = feedback_map.get(message["id"])
+            if fb:
+                message["feedback"] = {
+                    "id": fb["id"],
+                    "rating": fb["rating"],
+                    "comment": fb["comment"],
+                    "question_text": fb["question_text"],
+                    "created_at": fb["created_at"],
+                    "updated_at": fb["updated_at"],
+                }
+    return messages
 
 
 async def add_message(

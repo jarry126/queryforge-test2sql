@@ -32,6 +32,13 @@ async def _keyword_search(table: str, q: str, top_k: int, db_id: str | None) -> 
     return await keyword.keyword_search(table, q, top_k, db_id)
 
 
+def _public_doc(doc: dict) -> dict:
+    """去掉 pgvector Embedding 字段，避免进入 LangGraph checkpoint 后无法 msgpack 序列化。"""
+    out = dict(doc)
+    out.pop("embedding", None)
+    return out
+
+
 def _rrf_fuse(ranked_lists: list[list[dict]], k: int) -> list[dict]:
     """RRF 融合多路排名结果。score = Σ 1/(k + rank)。按 id 去重。"""
     scores: dict[int, float] = {}
@@ -43,7 +50,7 @@ def _rrf_fuse(ranked_lists: list[list[dict]], k: int) -> list[dict]:
             docs.setdefault(did, doc)
     fused = []
     for did, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-        d = dict(docs[did])
+        d = _public_doc(docs[did])
         d["rrf_score"] = score
         fused.append(d)
     return fused

@@ -15,6 +15,13 @@ from app.core.rag.embeddings import embed_texts
 JIEBA_CFG = "jiebacfg"
 
 
+def strip_embedding(row: dict) -> dict:
+    """检索结果不携带 embedding，避免 LangGraph checkpoint 序列化 pgvector Vector 失败。"""
+    out = dict(row)
+    out.pop("embedding", None)
+    return out
+
+
 async def upsert_schema_docs(rows: list[dict]) -> int:
     """写入 schema 文档。每行需含 db_id, doc_type, table_name, content, metadata。"""
     if not rows:
@@ -101,7 +108,7 @@ async def fetch_chunks_by_ids(ids: list[int]) -> list[dict]:
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT * FROM rag_chunk WHERE id = ANY(%s)", (ids,))
         cols = [c.name for c in cur.description]
-        return [dict(zip(cols, row, strict=True)) for row in await cur.fetchall()]
+        return [strip_embedding(dict(zip(cols, row, strict=True))) for row in await cur.fetchall()]
 
 
 async def vector_search(
@@ -124,7 +131,7 @@ async def vector_search(
             params,
         )
         cols = [c.name for c in cur.description]
-        return [dict(zip(cols, row, strict=True)) for row in await cur.fetchall()]
+        return [strip_embedding(dict(zip(cols, row, strict=True))) for row in await cur.fetchall()]
 
 
 def _json(obj: Any) -> str:
